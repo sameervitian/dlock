@@ -30,10 +30,10 @@ for { // loop is to re-attempt for lock acquisition when the lock was initially 
   value := map[string]string{
     "key1": "val1",
     // Optional keys
-    // Any number of similar keys can be added
+    // Any number of similar keys can be added with the limit of 512KB. as mentioned here - https://www.consul.io/docs/faq.html#q-what-is-the-per-key-value-size-limitation-for-consul-39-s-key-value-store-
     // key named `lockAcquisitionTime` is automatically added. This is the time at which lock is acquired. time is in RFC3339 format
   }
-  go d.RetryLockAcquire(value, acquireCh, releaseCh) // It will keep on attempting for the lock. The re-attempt interval is configured through `LockRetryInterval` set while dlock initialization. 
+  go d.RetryLockAcquire(value, acquireCh, releaseCh) // It will keep on attempting for the lock. The re-attempt interval is configured through `LockRetryInterval`, which is set while dlock initialization. 
   select {
   case <-acquireCh:
     log.Println("log acquired")
@@ -43,9 +43,9 @@ for { // loop is to re-attempt for lock acquisition when the lock was initially 
 }
 ```
 
-`acquireCh` recieves msg when the lock is acquired, other wise blocks and wait for lock acquisition 
+`acquireCh` recieves msg when the lock is acquired, otherwise blocks and wait for lock acquisition and compete with others for the lock 
 
-`releaseCh` recieves msg when the lock which was earlier held is released due to some reason
+`releaseCh` recieves msg when the lock which was earlier acquired is released due to some reason(consul session invalidation etc)
 
 ##### Destroy Consul Session and Release lock
 
