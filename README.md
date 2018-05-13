@@ -57,3 +57,8 @@ if err := d.DestroySession(); err != nil { // Should be called during clean-up. 
 }
 
 ```
+
+## Authors
+
+* [Sameer Akhtar](https://github.com/sameervitian)
+* [Rishi Bhardwaj](https://github.com/rishitoko)
