@@ -19,13 +19,13 @@ func main() {
 	var port = flag.Int64("port", 9001, "port")
 	flag.Parse()
 
-	var c *dlock.Client
+	var d *dlock.Dlock
 	var err error
 
 	go func() {
 		mcron := NewMCron()
 		// dlock.SetLogger("/tmp/dlock.log") // If set, dlock logs will be be directed to the file path specified, else on Stdout
-		c, err = dlock.NewClient(&dlock.Config{ConsulKey: "LockKV", LockRetryInterval: time.Second * 10})
+		d, err = dlock.New(&dlock.Config{ConsulKey: "LockKV", LockRetryInterval: time.Second * 10})
 		if err != nil {
 			log.Println("Error ", err)
 			return
@@ -41,7 +41,7 @@ func main() {
 				// Any number of similar keys can be added
 				// key named `lockAcquisitionTime` is automatically added. This is the time at which lock is acquired. time is in RFC3339 format
 			}
-			go c.RetryLockAcquire(value, acquireCh, releaseCh)
+			go d.RetryLockAcquire(value, acquireCh, releaseCh)
 			select {
 			case <-acquireCh:
 				mcron.Start() // Start the cron when lock is acquired
@@ -62,7 +62,7 @@ func main() {
 	signal.Notify(term, os.Interrupt, syscall.SIGTERM)
 	select {
 	case <-term:
-		if err := c.DestroySession(); err != nil {
+		if err := d.DestroySession(); err != nil {
 			log.Println(err)
 		}
 		log.Println("Exiting gracefully...")

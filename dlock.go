@@ -16,8 +16,8 @@ const (
 	DefautSessionTTL = 60 * 60 * 24 * time.Second
 )
 
-// Client provides a client to the dlock API
-type Client struct {
+// Dlock configured for lock acquisition
+type Dlock struct {
 	ConsulClient      *api.Client
 	Key               string
 	SessionID         string
@@ -38,6 +38,72 @@ func init() {
 	logger = log.New(os.Stdout, "dlock:", log.Ldate|log.Ltime|log.Lshortfile)
 }
 
+// New returns a new Dlock object
+func New(o *Config) (*Dlock, error) {
+	var d Dlock
+	consulClient, err := api.NewClient(api.DefaultConfig())
+	if err != nil {
+		logger.Println("error on creating consul client", err)
+		return &d, err
+	}
+
+	d.ConsulClient = consulClient
+	d.Key = o.ConsulKey
+	d.LockRetryInterval = DefaultLockRetryInterval
+	d.SessionTTL = DefautSessionTTL
+
+	if o.LockRetryInterval != 0 {
+		d.LockRetryInterval = o.LockRetryInterval
+	}
+	if o.SessionTTL != 0 {
+		d.SessionTTL = o.SessionTTL
+	}
+
+	return &d, nil
+}
+
+// RetryLockAcquire attempts to acquire the lock at `LockRetryInterval`
+// First consul session is created and then attempt is done to acquire lock on this session
+// Checks configured over Session is all the checks configured for the client itself
+// sends msg to chan `acquired` once lock is acquired
+// msg is sent to `released` chan when the lock is released due to consul session invalidation
+func (d *Dlock) RetryLockAcquire(value map[string]string, acquired chan<- bool, released chan<- bool) {
+	ticker := time.NewTicker(d.LockRetryInterval)
+	for ; true; <-ticker.C {
+		value["lockAcquisitionTime"] = time.Now().Format(time.RFC3339)
+		lock, err := d.acquireLock(value, released)
+		if err != nil {
+			logger.Println("error on acquireLock :", err, "retry in -", d.LockRetryInterval)
+			continue
+		}
+		if lock {
+			logger.Printf("lock acquired with consul session - %s", d.SessionID)
+			ticker.Stop()
+			acquired <- true
+		}
+	}
+}
+
+// DestroySession invalidates the consul session and indirectly release the acquired lock if any
+// Should be called in destructor function e.g clean-up, service reload
+// this will give others a chance to acquire lock
+func (d *Dlock) DestroySession() error {
+	if d.SessionID == "" {
+		logger.Printf("cannot destroy empty session")
+		return nil
+	}
+	_, err := d.ConsulClient.Session().Destroy(d.SessionID, nil)
+	if err != nil {
+		return err
+	}
+	logger.Printf("destroyed consul session - %s", d.SessionID)
+	return nil
+}
+
+func (d *Dlock) createSession() (string, error) {
+	return createSession(d.ConsulClient, d.Key, d.SessionTTL)
+}
+
 // SetLogger sets file path for dlock logs
 func SetLogger(logpath string) {
 	f, err := os.OpenFile(logpath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0644)
@@ -48,83 +114,18 @@ func SetLogger(logpath string) {
 	logger = log.New(f, "dlock:", log.Ldate|log.Ltime|log.Lshortfile)
 }
 
-// NewClient returns a new client
-func NewClient(o *Config) (*Client, error) {
-	var client Client
-	consulClient, err := api.NewClient(api.DefaultConfig())
-	if err != nil {
-		logger.Println("error on creating consul client", err)
-		return &client, err
-	}
-
-	client.ConsulClient = consulClient
-	client.Key = o.ConsulKey
-	client.LockRetryInterval = DefaultLockRetryInterval
-	client.SessionTTL = DefautSessionTTL
-
-	if o.LockRetryInterval != 0 {
-		client.LockRetryInterval = o.LockRetryInterval
-	}
-	if o.SessionTTL != 0 {
-		client.SessionTTL = o.SessionTTL
-	}
-
-	return &client, nil
-}
-
-// RetryLockAcquire attempts to acquire the lock at `LockRetryInterval`
-// First consul session is created and then attempt is done to acquire lock on this session
-// Checks configured over Session is all the checks configured for the client itself
-// sends msg to chan `acquired` once lock is acquired
-// msg is sent to `released` chan when the lock is released due to consul session invalidation
-func (c *Client) RetryLockAcquire(value map[string]string, acquired chan<- bool, released chan<- bool) {
-	ticker := time.NewTicker(c.LockRetryInterval)
-	for ; true; <-ticker.C {
-		value["lockAcquisitionTime"] = time.Now().Format(time.RFC3339)
-		lock, err := c.acquireLock(value, released)
-		if err != nil {
-			logger.Println("error on acquireLock :", err, "retry in -", c.LockRetryInterval)
-			continue
-		}
-		if lock {
-			logger.Printf("lock acquired with consul session - %s", c.SessionID)
-			ticker.Stop()
-			acquired <- true
-		}
-	}
-}
-
-// DestroySession invalidates the consul session and indirectly release the acquired lock if any
-// Should be called in destructor function e.g
-func (c *Client) DestroySession() error {
-	if c.SessionID == "" {
-		logger.Printf("cannot destroy empty session")
-		return nil
-	}
-	_, err := c.ConsulClient.Session().Destroy(c.SessionID, nil)
+func (d *Dlock) recreateSession() error {
+	sessionID, err := d.createSession()
 	if err != nil {
 		return err
 	}
-	logger.Printf("destroyed consul session - %s", c.SessionID)
+	d.SessionID = sessionID
 	return nil
 }
 
-func (c *Client) createSession() (string, error) {
-	return createSession(c.ConsulClient, c.Key, c.SessionTTL)
-}
-
-func (c *Client) recreateSession() error {
-	sessionID, err := c.createSession()
-	if err != nil {
-		return err
-	}
-	c.SessionID = sessionID
-	return nil
-}
-
-func (c *Client) acquireLock(value map[string]string, released chan<- bool) (bool, error) {
-	if c.SessionID == "" {
-		err := c.recreateSession()
+func (d *Dlock) acquireLock(value map[string]string, released chan<- bool) (bool, error) {
+	if d.SessionID == "" {
+		err := d.recreateSession()
 		if err != nil {
 			return false, err
 		}
@@ -133,14 +134,14 @@ func (c *Client) acquireLock(value map[string]string, released chan<- bool) (boo
 	if err != nil {
 		logger.Println("error on value marshal", err)
 	}
-	lock, err := c.ConsulClient.LockOpts(&api.LockOptions{Key: c.Key, Value: b, Session: c.SessionID, LockWaitTime: 1 * time.Second, LockTryOnce: true})
+	lock, err := d.ConsulClient.LockOpts(&api.LockOptions{Key: d.Key, Value: b, Session: d.SessionID, LockWaitTime: 1 * time.Second, LockTryOnce: true})
 	if err != nil {
 		return false, err
 	}
-	a, _, err := c.ConsulClient.Session().Info(c.SessionID, nil)
+	a, _, err := d.ConsulClient.Session().Info(d.SessionID, nil)
 	if err == nil && a == nil {
-		logger.Printf("consul session - %s is invalid now", c.SessionID)
-		c.SessionID = ""
+		logger.Printf("consul session - %s is invalid now", d.SessionID)
+		d.SessionID = ""
 		return false, nil
 	}
 	if err != nil {
@@ -154,7 +155,7 @@ func (c *Client) acquireLock(value map[string]string, released chan<- bool) (boo
 	if resp != nil {
 		go func() {
 			<-resp
-			logger.Printf("lock released with session - %s", c.SessionID)
+			logger.Printf("lock released with session - %s", d.SessionID)
 			released <- true
 		}()
 		return true, nil

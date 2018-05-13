@@ -1,15 +1,15 @@
-# dlock [![GoDoc](https://godoc.org/github.com/sameervitian/dlock?status.svg)](https://godoc.org/github.com/sameervitian/dlock)
+# dlock [![GoDoc](https://godod.org/github.com/sameervitian/dlock?status.svg)](https://godod.org/github.com/sameervitian/dlock)
 Distributed lock implementation in Golang using consul 
 
 
 
 ## Usage
 
-##### Client Initialization
+##### Dlock Initialization
 
 ```go 
 
-c, err = dlock.NewClient(&dlock.Config{ConsulKey: "LockKV", LockRetryInterval: time.Second * 10})
+d, err = dlock.New(&dlock.Config{ConsulKey: "LockKV", LockRetryInterval: time.Second * 10})
 if err != nil {
   log.Println("Error ", err)
   return
@@ -17,7 +17,7 @@ if err != nil {
 
 ```
 
-##### Atempt to Acquire Lock 
+##### Attempt to Acquire Lock 
 
 ```go 
 
@@ -33,7 +33,7 @@ for { // loop is to re-attempt for lock acquisition when the lock was initially 
     // Any number of similar keys can be added
     // key named `lockAcquisitionTime` is automatically added. This is the time at which lock is acquired. time is in RFC3339 format
   }
-  go c.RetryLockAcquire(value, acquireCh, releaseCh) // It will keep on attempting for the lock. The re-attempt interval is configured through `LockRetryInterval` set while dlock initialization. 
+  go d.RetryLockAcquire(value, acquireCh, releaseCh) // It will keep on attempting for the lock. The re-attempt interval is configured through `LockRetryInterval` set while dlock initialization. 
   select {
   case <-acquireCh:
     log.Println("log acquired")
@@ -51,8 +51,8 @@ for { // loop is to re-attempt for lock acquisition when the lock was initially 
 
 ```go 
 
-if err := c.DestroySession(); err != nil { // Should be called during clean-up. eg reloading the service. Can be done by catching SIGHUP signal 
-//Destroy session will release the lock and give others chance to acuire the lock
+if err := d.DestroySession(); err != nil { // Should be called during clean-up. eg reloading the service. Can be done by catching SIGHUP signal 
+//Destroy session will release the lock and give others a chance to acquire the lock
   log.Println(err)
 }
 
