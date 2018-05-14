@@ -153,9 +153,9 @@ func (d *Dlock) acquireLock(value map[string]string, released chan<- bool) (bool
 		return false, err
 	}
 	if resp != nil {
+		doneCh := make(chan struct{})
+		go func() { d.ConsulClient.Session().RenewPeriodic(d.SessionTTL.String(), d.SessionID, nil, doneCh) }()
 		go func() {
-			doneCh := make(chan struct{})
-			d.ConsulClient.Session().RenewPeriodic(d.SessionTTL.String(), d.SessionID, nil, doneCh)
 			<-resp
 			logger.Printf("lock released with session - %s", d.SessionID)
 			close(doneCh)
