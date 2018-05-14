@@ -13,7 +13,7 @@ const (
 	// DefaultLockRetryInterval is how long we wait after a failed lock acquisition
 	DefaultLockRetryInterval = 30 * time.Second
 	// DefautSessionTTL is ttl for the session created
-	DefautSessionTTL = 60 * 60 * 24 * time.Second
+	DefautSessionTTL = 5 * time.Minute
 )
 
 // Dlock configured for lock acquisition
@@ -154,8 +154,11 @@ func (d *Dlock) acquireLock(value map[string]string, released chan<- bool) (bool
 	}
 	if resp != nil {
 		go func() {
+			doneCh := make(chan struct{})
+			d.ConsulClient.Session().RenewPeriodic(d.SessionTTL.String(), d.SessionID, nil, doneCh)
 			<-resp
 			logger.Printf("lock released with session - %s", d.SessionID)
+			close(doneCh)
 			released <- true
 		}()
 		return true, nil
