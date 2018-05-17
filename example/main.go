@@ -65,6 +65,7 @@ func main() {
 		if err := d.DestroySession(); err != nil {
 			log.Println(err)
 		}
+		time.Sleep(1 * time.Second)
 		log.Println("Exiting gracefully...")
 	case err := <-errCh:
 		log.Println("Error starting web server, exiting gracefully:", err)
