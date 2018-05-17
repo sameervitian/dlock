@@ -1,4 +1,5 @@
-# dlock [![GoDoc](https://godoc.org/github.com/sameervitian/dlock?status.svg)](https://godoc.org/github.com/sameervitian/dlock)
+# dlock [![GoDoc](https://godoc.org/github.com/sameervitian/dlock?status.svg)](https://godoc.org/github.com/sameervitian/dlock) [![CircleCI](https://circleci.com/gh/sameervitian/dlock.svg?style=svg)](https://circleci.com/gh/sameervitian/dlock)
+
 Distributed lock implementation in Golang using consul 
 
 
