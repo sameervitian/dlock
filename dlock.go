@@ -23,6 +23,7 @@ type Dlock struct {
 	SessionID         string
 	LockRetryInterval time.Duration
 	SessionTTL        time.Duration
+	PermanentRelease  bool
 }
 
 // Config is used to configure creation of client
@@ -68,6 +69,10 @@ func New(o *Config) (*Dlock, error) {
 // sends msg to chan `acquired` once lock is acquired
 // msg is sent to `released` chan when the lock is released due to consul session invalidation
 func (d *Dlock) RetryLockAcquire(value map[string]string, acquired chan<- bool, released chan<- bool) {
+	if d.PermanentRelease {
+		logger.Printf("lock is permanently released. last session id - %+s", d.SessionID)
+		return
+	}
 	ticker := time.NewTicker(d.LockRetryInterval)
 	for ; true; <-ticker.C {
 		value["lockAcquisitionTime"] = time.Now().Format(time.RFC3339)
@@ -97,6 +102,7 @@ func (d *Dlock) DestroySession() error {
 		return err
 	}
 	logger.Printf("destroyed consul session - %s", d.SessionID)
+	d.PermanentRelease = true
 	return nil
 }
 
