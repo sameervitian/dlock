@@ -65,7 +65,7 @@ func New(o *Config) (*Dlock, error) {
 
 // RetryLockAcquire attempts to acquire the lock at `LockRetryInterval`
 // First consul session is created and then attempt is done to acquire lock on this session
-// Checks configured over Session is all the checks configured for the client itself 
+// Checks configured over Session is all the checks configured for the client itself
 // sends msg to chan `acquired` once lock is acquired
 // msg is sent to `released` chan when the lock is released due to consul session invalidation
 func (d *Dlock) RetryLockAcquire(value map[string]string, acquired chan<- bool, released chan<- bool) {
@@ -85,6 +85,7 @@ func (d *Dlock) RetryLockAcquire(value map[string]string, acquired chan<- bool, 
 			logger.Printf("lock acquired with consul session - %s", d.SessionID)
 			ticker.Stop()
 			acquired <- true
+			break
 		}
 	}
 }
